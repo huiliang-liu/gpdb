@@ -1,0 +1,13 @@
+platform: linux
+image_resource:
+  type: docker-image
+
+inputs:
+  - name: gpdb_src
+  - name: ccp_src
+outputs:
+
+params:
+
+run:
+  path: gpdb_src/gpMgmt/go-utils/src/gp_upgrade/integrations/end-to-end/bootstrap_test

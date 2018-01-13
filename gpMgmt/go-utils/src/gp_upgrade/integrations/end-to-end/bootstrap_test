@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -eox pipefail
+
+./ccp_src/aws/setup_ssh_to_cluster.sh
+
+ssh mdw bash -ex <<EOF
+    source /usr/local/greenplum-db-devel/greenplum_path.sh
+
+    new-bindir="$(dirname $GPHOME)/gpdb-new"
+
+    # TODO? do we need sudo here on CCP?
+    sudo cp -rp "$GPHOME" "$new-bindir"
+
+    gp_upgrade prepare start-hub
+    gp_upgrade status upgrade | grep "PENDING - Configuration Check"
+    gp_upgrade check config
+    gp_upgrade status upgrade | grep "COMPLETE - Configuration Check"
+
+    gp_upgrade status upgrade | grep "PENDING - Install binaries on segments"
+    gp_upgrade check seginstall
+    sleep 2
+    gp_upgrade status upgrade | grep "FAILED - Install binaries on segments"
+
+    #TODO: scp the new-bindir to sdw1 etc. as though to do a seginstall
+
+    gp_upgrade check seginstall
+    sleep 2
+    gp_upgrade status upgrade | grep "COMPLETE - Install binaries on segments"
+
+
+EOF
