@@ -27,8 +27,7 @@ function setup_cluster() {
     source $HOME_DIR/gpdb_src/gpAux/gpdemo/gpdemo-env.sh
 }
 
-function _main() {
-    setup_cluster
+function gpload_stress() {
     chown -R gpadmin:gpadmin $HOME_DIR/gpdb_src/gpMgmt/bin/gpload_test/gpload2
     export USER=gpadmin
     export PGUSER=gpadmin
@@ -38,6 +37,19 @@ function _main() {
     do
         su gpadmin -c "python TEST.py"
     done
+}
+
+function gpfdist_test() {
+    cd $HOME_DIR/gpdb_src/src/test/regress
+    make
+    chown -R gpadmin:gpadmin $HOME_DIR/gpdb_src/src/bin/gpfdist
+    cd $HOME_DIR/gpdb_src/src/bin/gpfdist
+    su gpadmin -c "make installcheck"
+}
+
+function _main() {
+    setup_cluster
+    gpfdist_test
 }
 
 _main "$@"
