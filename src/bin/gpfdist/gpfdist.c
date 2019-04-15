@@ -4112,8 +4112,8 @@ static int gpfdist_SSL_receive(const request_t *r, void *buf, const size_t bufle
  */
 static void free_SSL_resources(const request_t *r)
 {
-	BIO_ssl_shutdown(r->sbio);
-	BIO_vfree(r->io);
+	SSL_shutdown(r->ssl);  //or BIO_ssl_shutdown(r->ssl_bio);
+	BIO_vfree(r->io);  //ssl_bio is pushed to r->io list, so ssl_bio is freed too.
 	BIO_vfree(r->sbio);
 	//BIO_vfree(r->ssl_bio);
 	SSL_free(r->ssl);
@@ -4134,7 +4134,7 @@ static void handle_ssl_error(SOCKET sock, BIO *sbio, SSL *ssl)
 		ERR_print_errors(gcb.bio_err);
 	}
 
-	BIO_ssl_shutdown(sbio);
+	SSL_shutdown(ssl);
 	SSL_free(ssl);
 }
 
@@ -4306,11 +4306,11 @@ static void request_cleanup_and_free_SSL_resources(request_t *r)
 {
 	gprintln(r, "SSL cleanup and free");
 
-	/* Clean up request resources */
-	request_cleanup(r);
-
-	/* Release SSL related memory */
+	/* Shutdown SSL connection gracefully and Release SSL related memory */
 	free_SSL_resources(r);
+
+	/* Shutdown socket and Clean up request resources */
+	request_cleanup(r);
 }
 #endif
 
