@@ -1633,14 +1633,6 @@ static int session_attach(request_t* r)
 
 	/* found a session in hashtable*/
 
-	/* if error, send an error and close */
-	if (session->is_error)
-	{
-		http_error(r, FDIST_INTERNAL_ERROR, "session error");
-		request_end(r, 1, 0);
-		return -1;
-	}
-
 	/* session already ended. send an empty response, and close. */
 	if (NULL == session->fstream)
 	{
@@ -1648,6 +1640,14 @@ static int session_attach(request_t* r)
 
 		http_empty(r);
 		request_end(r, 0, 0);
+		return -1;
+	}
+
+	/* if error, send an error and close */
+	if (session->is_error)
+	{
+		http_error(r, FDIST_INTERNAL_ERROR, "session error");
+		request_end(r, 1, 0);
 		return -1;
 	}
 
