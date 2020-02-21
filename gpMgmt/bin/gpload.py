@@ -18,7 +18,7 @@ Options:
     -l logfile: log output to logfile
     --no_auto_trans: do not wrap gpload in transaction
     --gpfdist_timeout timeout: gpfdist timeout value
-    --max_retries retry_times: max retry times on gpdb connection timeout. 0 means disabled, -1 means forever
+    --max_retries retry_times: max retry times on gpdb connection timed out. 0 means disabled, -1 means forever
     --version: print version number and exit
     -?: help
 '''
@@ -1220,7 +1220,7 @@ class gpload:
                         configFilename = argv[1]
                         argv = argv[2:]
                     elif argv[0]=='--max_retries':
-                        self.options.max_retries = argv[1]
+                        self.options.max_retries = int(argv[1])
                         argv = argv[2:]
                     elif argv[0]=='--no_auto_trans':
                         self.options.no_auto_trans = True
@@ -1847,10 +1847,16 @@ class gpload:
                     self.log(self.ERROR, "too many login attempt failures")
                 self.setup_connection(recurse)
             elif errorMessage.find("Connection timed out") != -1 and self.options.max_retries != 0:
-                if recurse > self.options.max_retries and self.options.max_retries > 0:
-                    self.log(self.ERROR, "could not connect to database: %s after" \
-                        "retry %d times." % (errorMessage, recurse))
                 recurse += 1
+                if self.options.max_retries > 0:
+                    if recurse > self.options.max_retries: # retry failed
+                        self.log(self.ERROR, "could not connect to database after retry %d times, " \
+                            "error message:\n %s" % (recurse-1, errorMessage))
+                    else:
+                        self.log(self.INFO, "retry to connect to database, %d of %d times" % (recurse,
+                            self.options.max_retries))
+                else: # max_retries < 0, retry forever
+                    self.log(self.INFO, "retry to connect to database.")
                 self.setup_connection(recurse)
             else:
                 self.log(self.ERROR, "could not connect to database: %s. Is " \
