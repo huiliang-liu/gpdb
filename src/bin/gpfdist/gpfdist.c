@@ -2432,6 +2432,7 @@ http_setup(void)
 		for (rp = addrs; rp != NULL; rp = rp->ai_next)
 		{
 			gprint(NULL, "Trying to open listening socket:\n");
+			gdebug(NULL, "debug: Trying to open listening socket:\n");
 			print_listening_address(rp);
 
 			/*

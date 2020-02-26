@@ -92,7 +92,7 @@ function _main() {
 
     time setup_ssh_keys
     time remote_setup
-    trap cleanup EXIT
+    # trap cleanup EXIT
     time remote_clone
     time remote_compile
     time download
