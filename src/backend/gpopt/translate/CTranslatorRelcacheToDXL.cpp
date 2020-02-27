@@ -1618,6 +1618,7 @@ CTranslatorRelcacheToDXL::RetrieveType
 	BOOL is_hashable = gpdb::IsOpHashJoinable(ptce->eq_opr, oid_type);
 	BOOL is_merge_joinable = gpdb::IsOpMergeJoinable(ptce->eq_opr, oid_type);
 	BOOL is_composite_type = gpdb::IsCompositeType(oid_type);
+	BOOL is_text_related_type = gpdb::IsTextRelatedType(oid_type);
 
 	// get standard aggregates
 	CMDIdGPDB *mdid_min = GPOS_NEW(mp) CMDIdGPDB(gpdb::GetAggregate("min", oid_type));
@@ -1666,6 +1667,7 @@ CTranslatorRelcacheToDXL::RetrieveType
 						 is_hashable,
 						 is_merge_joinable,
 						 is_composite_type,
+						 is_text_related_type,
 						 mdid_type_relid,
 						 mdid_type_array,
 						 ptce->typlen
@@ -2972,7 +2974,7 @@ CTranslatorRelcacheToDXL::TransformMcvToOrcaHistogram
 			// building a histogram. return an empty histogram
 			datums->Release();
 			freqs->Release();
-			return GPOS_NEW(mp) CHistogram(GPOS_NEW(mp) CBucketArray(mp));
+			return GPOS_NEW(mp) CHistogram(mp);
 		}
 	}
 
@@ -3073,11 +3075,11 @@ CTranslatorRelcacheToDXL::TransformHistToOrcaHistogram
 			// order is different in GPDB, and use const expression eval to compare
 			// datums in Orca (MPP-22780)
 			buckets->Release();
-			return GPOS_NEW(mp) CHistogram(GPOS_NEW(mp) CBucketArray(mp));
+			return GPOS_NEW(mp) CHistogram(mp);
 		}
 	}
 
-	CHistogram *hist = GPOS_NEW(mp) CHistogram(buckets);
+	CHistogram *hist = GPOS_NEW(mp) CHistogram(mp, buckets);
 	return hist;
 }
 

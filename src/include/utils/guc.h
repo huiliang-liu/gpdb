@@ -23,8 +23,9 @@
 #define MAX_PRE_AUTH_DELAY (60)
 /*
  * One connection must be reserved for FTS to always able to probe
- * primary. So, this acts as lower limit on reserved superuser connections.
-*/
+ * primary. So, this acts as lower limit on reserved superuser connections on
+ * primaries.
+ */
 #define RESERVED_FTS_CONNECTIONS (1)
 
 
@@ -228,6 +229,10 @@ typedef enum
 extern List    *gp_guc_list_for_explain;
 extern List    *gp_guc_list_for_no_plan;
 
+/* Changed GUC which need to be pass to QE from QD */
+extern List *gp_guc_restore_list;
+extern bool gp_guc_need_restore;
+
 /* GUC vars that are actually declared in guc.c, rather than elsewhere */
 extern bool log_duration;
 extern bool Debug_print_plan;
@@ -293,6 +298,8 @@ extern bool debug_walrepl_snd;
 extern bool debug_walrepl_syncrep;
 extern bool debug_walrepl_rcv;
 extern bool debug_basebackup;
+
+extern int rep_lag_avoidance_threshold;
 
 /* Latch mechanism debug GUCs */
 extern bool debug_latch;
@@ -408,6 +415,8 @@ extern char  *data_directory;
 /* optimizer cost model */
 #define OPTIMIZER_GPDB_LEGACY           0       /* GPDB's legacy cost model */
 #define OPTIMIZER_GPDB_CALIBRATED       1       /* GPDB's calibrated cost model */
+#define OPTIMIZER_GPDB_EXPERIMENTAL     2       /* GPDB's experimental cost model */
+
 
 /* Optimizer related gucs */
 extern bool	optimizer;
@@ -774,6 +783,7 @@ extern bool gpvars_check_statement_mem(int *newval, void **extra, GucSource sour
 extern bool gpvars_check_gp_enable_gpperfmon(bool *newval, void **extra, GucSource source);
 extern bool gpvars_check_gp_gpperfmon_send_interval(int *newval, void **extra, GucSource source);
 extern int guc_name_compare(const char *namea, const char *nameb);
+extern void DispatchSyncPGVariable(struct config_generic * gconfig);
 
 
 extern StdRdOptions *defaultStdRdOptions(char relkind);

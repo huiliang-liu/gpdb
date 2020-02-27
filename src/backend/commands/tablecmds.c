@@ -1766,9 +1766,6 @@ ExecuteTruncate(TruncateStmt *stmt)
 	/*
 	 * OK, truncate each table.
 	 */
-	if (Gp_role == GP_ROLE_DISPATCH)
-		cdb_sync_oid_to_segments();
-
 	mySubid = GetCurrentSubTransactionId();
 
 	foreach(cell, rels)
@@ -1848,11 +1845,12 @@ ExecuteTruncate(TruncateStmt *stmt)
 	{
 		ListCell	*lc;
 
+		Assert(GetAssignedOidsForDispatch() == NIL);
 		CdbDispatchUtilityStatement((Node *) stmt,
 									DF_CANCEL_ON_ERROR |
 									DF_WITH_SNAPSHOT |
 									DF_NEED_TWO_PHASE,
-									GetAssignedOidsForDispatch(),
+									NIL,
 									NULL);
 
 		/* MPP-6929: metadata tracking */
@@ -13379,8 +13377,6 @@ copy_relation_data(SMgrRelation src, SMgrRelation dst,
 
 		PageSetChecksumInplace(page, blkno);
 
-		PageSetChecksumInplace(page, blkno);
-
 		/*
 		 * Now write the page.  We say isTemp = true even if it's not a temp
 		 * rel, because there's no need for smgr to schedule an fsync for this
@@ -17462,19 +17458,31 @@ split_rows(Relation intoa, Relation intob, Relation temprel)
 				break;
 		}
 
-		/* prepare for ExecQual */
-		econtext->ecxt_scantuple = slotT;
+		/*
+		 * Map attributes from origin to target. We should consider dropped
+		 * columns in the origin.
+		 * 
+		 * ExecQual should use targetSlot rather than slotT in case possible 
+		 * partition key mapping.
+		 */
+		AssertImply(!PointerIsValid(achk), PointerIsValid(bchk));
+		targetSlot = reconstructMatchingTupleSlot(slotT, achk ? rria : rrib);
+		econtext->ecxt_scantuple = targetSlot;
 
 		/* determine if we are inserting into a or b */
 		if (achk)
 		{
 			targetIsA = ExecQual((List *)achk, econtext, false);
+
+			if (!targetIsA)
+				targetSlot = reconstructMatchingTupleSlot(slotT, rrib);
 		}
 		else
 		{
-			Assert(PointerIsValid(bchk));
-
 			targetIsA = !ExecQual((List *)bchk, econtext, false);
+
+			if (targetIsA)
+				targetSlot = reconstructMatchingTupleSlot(slotT, rria);
 		}
 
 		/* load variables for the specific target */
@@ -17492,12 +17500,6 @@ split_rows(Relation intoa, Relation intob, Relation temprel)
 			targetAOCSDescPtr = &aocsinsertdesc_b;
 			targetRelInfo = rrib;
 		}
-
-		/*
-		 * Map attributes from origin to target.  We should consider dropped
-		 * columns in the origin.
-		 */
-		targetSlot = reconstructMatchingTupleSlot(slotT, targetRelInfo);
 
 		/* insert into the target table */
 		if (RelationIsHeap(targetRelation))

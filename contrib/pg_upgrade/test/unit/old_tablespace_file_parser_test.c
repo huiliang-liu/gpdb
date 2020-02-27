@@ -1,11 +1,7 @@
-#include <stdarg.h>
-#include <stddef.h>
-#include <setjmp.h>
-#include <stdbool.h>
+#include "cmockery_gp.h"
 
-#include "cmockery.h"
-
-#include "old_tablespace_file_parser.h"
+#include "greenplum/old_tablespace_file_parser.h"
+#include "greenplum/old_tablespace_file_parser_observer.h"
 
 static int _invalid_access_to_row_called_with_row_index;
 static int _invalid_access_to_field_called_with_row_index;

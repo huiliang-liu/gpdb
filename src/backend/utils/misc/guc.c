@@ -76,6 +76,7 @@
 #include "tsearch/ts_cache.h"
 #include "utils/builtins.h"
 #include "utils/bytea.h"
+#include "utils/faultinjector.h"
 #include "utils/guc_tables.h"
 #include "utils/memutils.h"
 #include "utils/pg_locale.h"
@@ -1750,11 +1751,11 @@ static struct config_int ConfigureNamesInt[] =
 	{
 		{"superuser_reserved_connections", PGC_POSTMASTER, CONN_AUTH_SETTINGS,
 			gettext_noop("Sets the number of connection slots reserved for "
-						"superusers (including reserved FTS connections)."),
+						"superusers (including reserved FTS connection for primaries)."),
 			NULL
 		},
 		&ReservedBackends,
-		3, RESERVED_FTS_CONNECTIONS, MAX_BACKENDS,
+		10, RESERVED_FTS_CONNECTIONS, MAX_BACKENDS,
 		NULL, NULL, NULL
 	},
 
@@ -2218,7 +2219,7 @@ static struct config_int ConfigureNamesInt[] =
 			GUC_UNIT_MS | GUC_SUPERUSER_ONLY
 		},
 		&wal_sender_timeout,
-		60 * 1000, 0, INT_MAX,
+		300 * 1000, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
 
@@ -5158,6 +5159,21 @@ AtEOXact_GUC(bool isCommit, int nestLevel)
 			/* Report new value if we changed it */
 			if (changed && (gconf->flags & GUC_REPORT))
 				ReportGUCOption(gconf);
+
+			/*
+			 * If a guc's value changed on QD,
+			 * record it and restore QE before next query start
+			 */
+			if (Gp_role == GP_ROLE_DISPATCH
+					&& !IsTransactionBlock()
+					&& changed
+					&& ((isCommit) || (!isCommit && gp_guc_need_restore))
+					&& (gconf->flags & GUC_GPDB_NEED_SYNC))
+			{
+				MemoryContext oldcontext = MemoryContextSwitchTo(TopMemoryContext);
+				gp_guc_restore_list = lappend(gp_guc_restore_list, gconf);
+				MemoryContextSwitchTo(oldcontext);
+			}
 		}						/* end of stack-popping loop */
 
 		if (stack != NULL)
@@ -7188,6 +7204,8 @@ ExecSetVariableStmt(VariableSetStmt *stmt, bool isTopLevel)
 			{
 				WarnNoTransactionChain(isTopLevel, "SET LOCAL");
 			}
+
+			SIMPLE_FAULT_INJECTOR("set_variable_fault");
 			(void) set_config_option(stmt->name,
 									 ExtractSetVariableArgs(stmt),
 									 (superuser() ? PGC_SUSET : PGC_USERSET),
@@ -7396,44 +7414,69 @@ DispatchSetPGVariable(const char *name, List *args, bool is_local)
 
 		appendStringInfo(&buffer, "%s TO ", quote_identifier(name));
 
-		foreach(l, args)
+		/*
+		 * GPDB: We handle the timezone GUC specially. This is because the
+		 * timezone GUC can be set with the SET TIME ZONE .. syntax which is an
+		 * alias for SET timezone. Instead of dispatching the SET TIME ZONE ..
+		 * as a special case, we dispatch the already set time zone from the QD
+		 * with the usual SET syntax flavor (SET timezone TO <>).
+		 * Please refer to Issue: #9055 for additional detail.
+		 * #9055 - https://github.com/greenplum-db/gpdb/issues/9055
+		 */
+		if (strcmp(name, "timezone") == 0)
+			appendStringInfo(&buffer, "%s",
+							 quote_literal_cstr(GetConfigOptionByName("timezone",
+																	  NULL)));
+		else
 		{
-			A_Const    *arg = (A_Const *) lfirst(l);
-			char	   *val;
-
-			if (l != list_head(args))
-				appendStringInfo(&buffer, ", ");
-
-			if (!IsA(arg, A_Const))
-				elog(ERROR, "unrecognized node type: %d", (int) nodeTag(arg));
-
-			switch (nodeTag(&arg->val))
+			foreach(l, args)
 			{
-				case T_Integer:
-					appendStringInfo(&buffer, "%ld", intVal(&arg->val));
-					break;
-				case T_Float:
-					/* represented as a string, so just copy it */
-					appendStringInfoString(&buffer, strVal(&arg->val));
-					break;
-				case T_String:
-					val = strVal(&arg->val);
+				Node	   *arg = (Node *) lfirst(l);
+				char	   *val;
+				A_Const	   *con;
 
-					/*
-					 * Plain string literal or identifier. Quote it.
-					 */
+				if (l != list_head(args))
+					appendStringInfo(&buffer, ", ");
 
-					if (val[0] != '\'')
-						appendStringInfo(&buffer, "%s", quote_literal_cstr(val));
-					else
-						appendStringInfo(&buffer, "%s",val);
+				if (IsA(arg, TypeCast))
+				{
+					TypeCast   *tc = (TypeCast *) arg;
+					arg = tc->arg;
+				}
+
+				con = (A_Const *) arg;
+
+				if (!IsA(con, A_Const))
+					elog(ERROR, "unrecognized node type: %d", (int) nodeTag(arg));
+
+				switch (nodeTag(&con->val))
+				{
+					case T_Integer:
+						appendStringInfo(&buffer, "%ld", intVal(&con->val));
+						break;
+					case T_Float:
+						/* represented as a string, so just copy it */
+						appendStringInfoString(&buffer, strVal(&con->val));
+						break;
+					case T_String:
+						val = strVal(&con->val);
+
+						/*
+						 * Plain string literal or identifier. Quote it.
+						 */
+
+						if (val[0] != '\'')
+							appendStringInfo(&buffer, "%s", quote_literal_cstr(val));
+						else
+							appendStringInfo(&buffer, "%s",val);
 
 
-					break;
-				default:
-					elog(ERROR, "unrecognized node type: %d",
-						 (int) nodeTag(&arg->val));
-					break;
+						break;
+					default:
+						elog(ERROR, "unrecognized node type: %d",
+							 (int) nodeTag(&con->val));
+						break;
+				}
 			}
 		}
 	}

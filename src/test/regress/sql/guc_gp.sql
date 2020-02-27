@@ -104,13 +104,26 @@ reset work_mem;
 --
 CREATE TABLE timezone_table AS SELECT * FROM (VALUES (123,1513123564),(123,1512140765),(123,1512173164),(123,1512396441)) foo(a, b) DISTRIBUTED RANDOMLY;
 
-SELECT DISTINCT to_timestamp(b)::date FROM timezone_table;
+SELECT to_timestamp(b)::timestamp WITH TIME ZONE AS b_ts FROM timezone_table ORDER BY b_ts;
 SET timezone= 'America/New_York';
-SHOW timezone;
-SELECT DISTINCT to_timestamp(b)::date FROM timezone_table;
+-- Check if it is set correctly on QD.
+SELECT to_timestamp(1613123565)::timestamp WITH TIME ZONE;
+-- Check if it is set correctly on the QEs.
+SELECT to_timestamp(b)::timestamp WITH TIME ZONE AS b_ts FROM timezone_table ORDER BY b_ts;
 RESET timezone;
-SHOW timezone;
-SELECT DISTINCT to_timestamp(b)::date FROM timezone_table;
+-- Check if it is reset correctly on QD.
+SELECT to_timestamp(1613123565)::timestamp WITH TIME ZONE;
+-- Check if it is reset correctly on the QEs.
+SELECT to_timestamp(b)::timestamp WITH TIME ZONE AS b_ts FROM timezone_table ORDER BY b_ts;
+
+--
+-- Test if SET TIME ZONE INTERVAL is dispatched correctly to all segments
+--
+SET TIME ZONE INTERVAL '04:30:06' HOUR TO MINUTE;
+-- Check if it is set correctly on QD.
+SELECT to_timestamp(1613123565)::timestamp WITH TIME ZONE;
+-- Check if it is set correctly on the QEs.
+SELECT to_timestamp(b)::timestamp WITH TIME ZONE AS b_ts FROM timezone_table ORDER BY b_ts;
 
 -- Test default_transaction_isolation and transaction_isolation fallback from serializable to repeatable read
 CREATE TABLE test_serializable(a int);
@@ -129,3 +142,48 @@ BEGIN TRANSACTION ISOLATION LEVEL serializable;
 	SELECT * FROM test_serializable;
 COMMIT;
 DROP TABLE test_serializable;
+--
+-- Test DISCARD TEMP.
+--
+-- There's a test like this in upstream 'guc' test, but this expanded version
+-- verifies that temp tables are dropped on segments, too.
+--
+CREATE TEMP TABLE reset_test ( data text ) ON COMMIT DELETE ROWS;
+DISCARD TEMP;
+-- Try to create a new temp table with same. Should work.
+CREATE TEMP TABLE reset_test ( data text ) ON COMMIT PRESERVE ROWS;
+
+-- Now test that the effects of DISCARD TEMP can be rolled back
+BEGIN;
+DISCARD TEMP;
+ROLLBACK;
+-- the table should still exist.
+INSERT INTO reset_test VALUES (1);
+
+-- Unlike DISCARD TEMP, DISCARD ALL cannot be run in a transaction.
+BEGIN;
+DISCARD ALL;
+COMMIT;
+-- the table should still exist.
+INSERT INTO reset_test VALUES (2);
+SELECT * FROM reset_test;
+
+-- Also DISCARD ALL does not have cluster wide effects. CREATE will fail as the
+-- table will not be dropped in the segments.
+DISCARD ALL;
+CREATE TEMP TABLE reset_test ( data text ) ON COMMIT PRESERVE ROWS;
+
+-- Test single query guc rollback
+set allow_segment_DML to on;
+
+set datestyle='german';
+select gp_inject_fault('set_variable_fault', 'error', dbid)
+from gp_segment_configuration where content=0 and role='p';
+set datestyle='sql, mdy';
+-- after guc set failed, before next query handle, qd will sync guc
+-- to qe. using `select 1` trigger guc reset.
+select 1;
+select current_setting('datestyle') from gp_dist_random('gp_id');
+
+select gp_inject_fault('all', 'reset', dbid) from gp_segment_configuration;
+set allow_segment_DML to off;

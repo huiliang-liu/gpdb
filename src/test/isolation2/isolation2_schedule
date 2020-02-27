@@ -7,9 +7,6 @@ test: select_dropped_table
 # test update hash col under utility mode
 test: update_hash_col_utilitymode
 
-# test delete/update when there are tuples with wrong distribution on segments.
-test: modifytable_with_bad_distribution
-
 # Tests for crash recovery
 test: uao_crash_compaction_column
 test: uao_crash_compaction_row
@@ -19,6 +16,11 @@ test: crash_recovery_dtm
 test: unlogged_heap_tables
 test: unlogged_appendonly_tables
 test: udf_exception_blocks_panic_scenarios
+test: ao_same_trans_truncate_crash
+
+# Tests for packcore, will use the coredumps generated in crash_recovery_dtm,
+# so must be scheduled after that one.
+test: packcore
 
 # Tests on global deadlock detector
 test: select_for_update
@@ -39,12 +41,18 @@ test: gdd/local-deadlock-03
 # gdd end
 test: gdd/end
 
+test: modify_table_data_corrupt
+
 # The following test injects a fault at a generic location
 # (StartTransaction).  The fault can be easily triggered by a
 # concurrent test, so run the test by itself.
 test: deadlock_under_entry_db_singleton
 
-test: starve_case pg_views_concurrent_drop alter_blocks_for_update_and_viceversa drop_rename reader_waits_for_lock resource_queue misc
+#  this case creates table & index in utility mode, which may cause oid
+#  conflict when running in parallel with other cases.
+test: misc
+
+test: starve_case pg_views_concurrent_drop alter_blocks_for_update_and_viceversa drop_rename reader_waits_for_lock resource_queue
 test: vacuum_drop_phase_ao
 
 # below test(s) inject faults so each of them need to be in a separate group
@@ -70,6 +78,9 @@ test: ao_upgrade
 
 # below test utilizes fault injectors so it needs to be in a group by itself
 test: external_table
+
+# This test validates that for AO we delay fsync to checkpointer on mirror.
+test: fsync_ao
 
 # Tests on Append-Optimized tables (row-oriented).
 test: concurrent_index_creation_should_not_deadlock
@@ -168,6 +179,8 @@ test: uao/vacuum_cleanup_column
 test: uao/insert_should_not_use_awaiting_drop_column
 test: add_column_after_vacuum_skip_drop_column
 test: vacuum_after_vacuum_skip_drop_column
+
+test: segwalrep/die_commit_pending_replication
 
 # Tests for FTS
 test: fts_errors

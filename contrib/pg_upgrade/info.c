@@ -13,7 +13,9 @@
 
 #include "access/transam.h"
 #include "catalog/pg_class.h"
-
+#include "greenplum/info_gp.h"
+#include "greenplum/old_tablespace_file_gp.h"
+#include "greenplum/pg_upgrade_greenplum.h"
 
 static void create_rel_filename_map(const char *old_data, const char *new_data,
 						const DbInfo *old_db, const DbInfo *new_db,
@@ -357,7 +359,6 @@ get_db_and_rel_infos(ClusterInfo *cluster)
 		print_db_infos(&cluster->dbarr);
 }
 
-
 /*
  * get_db_infos()
  *
@@ -377,8 +378,13 @@ get_db_infos(ClusterInfo *cluster)
 				i_spclocation;
 	char		query[QUERY_ALLOC];
 
+	/*
+	 * greenplum specific indexes
+	 */
+	int         i_tablespace_oid;
+
 	snprintf(query, sizeof(query),
-			 "SELECT d.oid, d.datname, %s "
+			 "SELECT d.oid, d.datname, t.oid as tablespace_oid, %s "
 			 "FROM pg_catalog.pg_database d "
 			 " LEFT OUTER JOIN pg_catalog.pg_tablespace t "
 			 " ON d.dattablespace = t.oid "
@@ -395,6 +401,7 @@ get_db_infos(ClusterInfo *cluster)
 	i_oid = PQfnumber(res, "oid");
 	i_datname = PQfnumber(res, "datname");
 	i_spclocation = PQfnumber(res, "spclocation");
+	i_tablespace_oid = PQfnumber(res, "tablespace_oid");
 
 	ntups = PQntuples(res);
 	dbinfos = (DbInfo *) pg_malloc(sizeof(DbInfo) * ntups);
@@ -404,7 +411,10 @@ get_db_infos(ClusterInfo *cluster)
 		dbinfos[tupnum].db_oid = atooid(PQgetvalue(res, tupnum, i_oid));
 		dbinfos[tupnum].db_name = pg_strdup(PQgetvalue(res, tupnum, i_datname));
 		snprintf(dbinfos[tupnum].db_tablespace, sizeof(dbinfos[tupnum].db_tablespace), "%s",
-				 PQgetvalue(res, tupnum, i_spclocation));
+		         determine_db_tablespace_path(
+		                 cluster,
+		                 PQgetvalue(res, tupnum, i_spclocation),
+                         atooid(PQgetvalue(res, tupnum, i_tablespace_oid))));
 	}
 	PQclear(res);
 
@@ -413,7 +423,6 @@ get_db_infos(ClusterInfo *cluster)
 	cluster->dbarr.dbs = dbinfos;
 	cluster->dbarr.ndbs = ntups;
 }
-
 
 /*
  * get_rel_infos()
@@ -672,30 +681,9 @@ get_rel_infos(ClusterInfo *cluster, DbInfo *dbinfo)
 		/* Is the tablespace oid non-zero? */
 		if (tablespace_oid != 0)
 		{
-			bool is_old_cluster = old_cluster.major_version == cluster->major_version;
-
-			if (is_old_cluster &&
-				!is_old_tablespaces_file_empty(old_cluster.old_tablespace_file_contents))
-			{
-				char tablespace_path[MAXPGPATH];
-
-				char *tablespace_location = old_tablespace_file_get_tablespace_path_for_oid(
-					old_cluster.old_tablespace_file_contents, tablespace_oid);
-
-				snprintf(tablespace_path, sizeof(tablespace_path), "%s/%u",
-						 tablespace_location, 
-						 tablespace_oid);
-
-				tablespace = tablespace_path;
-				Assert(tablespace != NULL);
-			}
-			else {
-				/*
-				 * The tablespace location might be "", meaning the cluster
-				 * default location, i.e. pg_default or pg_global.
-				 */
-				tablespace = PQgetvalue(res, relnum, i_spclocation);
-			}
+			tablespace = determine_db_tablespace_path(cluster,
+			                                          PQgetvalue(res, relnum, i_spclocation),
+			                                          tablespace_oid);
 
 			/* Can we reuse the previous string allocation? */
 			if (last_tablespace && strcmp(tablespace, last_tablespace) == 0)
@@ -717,11 +705,11 @@ get_rel_infos(ClusterInfo *cluster, DbInfo *dbinfo)
 		relkind = PQgetvalue(res, relnum, i_relkind) [0];
 
 		/*
-		 * RELSTORAGE_AOROWS and RELSTORAGE_AOCOLS. The structure of append
+		 * The structure of append
 		 * optimized tables is similar enough for row and column oriented
 		 * tables so we can handle them both here.
 		 */
-		if (relstorage == RELSTORAGE_AOROWS || relstorage == RELSTORAGE_AOCOLS)
+		if (is_appendonly(relstorage))
 		{
 			char	   *segrel;
 			char	   *visimaprel;

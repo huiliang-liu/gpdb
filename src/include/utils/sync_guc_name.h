@@ -1,3 +1,4 @@
+		"check_function_bodies",
 		"client_min_messages",
 		"commit_delay",
 		"commit_siblings",
@@ -102,6 +103,7 @@
 		"statement_mem",
 		"statement_timeout",
 		"temp_buffers",
+		"test_copy_qd_qe_split",
 		"TimeZone",
 		"verify_gpfdists_cert",
 		"vmem_process_interrupt",

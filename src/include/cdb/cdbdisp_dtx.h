@@ -32,14 +32,12 @@ struct CdbPgResults;
  */
 struct pg_result **
 CdbDispatchDtxProtocolCommand(DtxProtocolCommand dtxProtocolCommand,
-							  int flags,
 							  char	*dtxProtocolCommandLoggingStr,
 							  char	*gid,
-							  DistributedTransactionId	gxid,
 							  ErrorData **qeError,
 							  int *resultCount,
 							  bool* badGangs,
-							  List *twophaseSegments,
+							  List *dtxSegments,
 							  char *serializedDtxContextInfo,
 							  int serializedDtxContextInfoLen);
 

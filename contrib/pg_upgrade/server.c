@@ -12,6 +12,7 @@
 #include "fe_utils/connect.h"
 #include "pg_upgrade.h"
 
+#include "greenplum/pg_upgrade_greenplum.h"
 
 static PGconn *get_db_conn(ClusterInfo *cluster, const char *db_name);
 
@@ -188,7 +189,7 @@ stop_postmaster_atexit(void)
 
 
 bool
-start_postmaster(ClusterInfo *cluster, bool throw_error)
+start_postmaster(ClusterInfo *cluster, bool report_and_exit_on_error)
 {
 	char		cmd[MAXPGPATH * 4 + 1000];
 	PGconn	   *conn;
@@ -241,30 +242,18 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 	else
 		version_opts = "-c gp_num_contents_in_cluster=1";
 
-	int gp_dbid; 
-	int gp_content_id;
-
-	if (user_opts.segment_mode == DISPATCHER)
-	{
-		gp_dbid = 1;
-		gp_content_id = -1;
-	}
-	else
-	{
-		gp_dbid = cluster->gp_dbid;
-		gp_content_id = 0;
-	}
+	char *extra_pg_ctl_flags = greenplum_extra_pg_ctl_flags(cluster->greenplum_cluster_info);
 
 	snprintf(cmd, sizeof(cmd),
-		  "\"%s/pg_ctl\" -w -l \"%s\" -D \"%s\" -o \"-p %d -c gp_role=utility %s%s %s%s %s --gp_dbid=%d --gp_contentid=%d \" start",
+		  "\"%s/pg_ctl\" -w -l \"%s\" -D \"%s\" -o \"-p %d -c gp_role=utility %s%s %s%s %s %s\" start",
 		  cluster->bindir, SERVER_LOG_FILE, cluster->pgconfig, cluster->port,
 			 (cluster->controldata.cat_ver >=
 			  BINARY_UPGRADE_SERVER_FLAG_CAT_VER) ? " -b" :
 			 " -c autovacuum=off -c autovacuum_freeze_max_age=2000000000",
 			 (cluster == &new_cluster) ?
 	  " -c synchronous_commit=off -c fsync=off -c full_page_writes=off" : "",
-			 cluster->pgopts ? cluster->pgopts : "", socket_string, version_opts, 
-			 gp_dbid, gp_content_id);
+			 cluster->pgopts ? cluster->pgopts : "", socket_string, version_opts,
+			 extra_pg_ctl_flags);
 	/*
 	 * Don't throw an error right away, let connecting throw the error because
 	 * it might supply a reason for the failure.
@@ -274,11 +263,11 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 							  (strcmp(SERVER_LOG_FILE,
 									  SERVER_START_LOG_FILE) != 0) ?
 							  SERVER_LOG_FILE : NULL,
-							  false,
+							  report_and_exit_on_error, false,
 							  "%s", cmd);
 
 	/* Did it fail and we are just testing if the server could be started? */
-	if (!pg_ctl_return && !throw_error)
+	if (!pg_ctl_return && !report_and_exit_on_error)
 		return false;
 
 	/*
@@ -317,9 +306,9 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 	PQfinish(conn);
 
 	/*
-	 * If pg_ctl failed, and the connection didn't fail, and throw_error is
-	 * enabled, fail now.  This could happen if the server was already
-	 * running.
+	 * If pg_ctl failed, and the connection didn't fail, and
+	 * report_and_exit_on_error is enabled, fail now.  This
+	 * could happen if the server was already running.
 	 */
 	if (!pg_ctl_return)
 		pg_fatal("pg_ctl failed to start the %s server, or connection failed\n",
@@ -330,7 +319,7 @@ start_postmaster(ClusterInfo *cluster, bool throw_error)
 
 
 void
-stop_postmaster(bool fast)
+stop_postmaster(bool in_atexit)
 {
 	ClusterInfo *cluster;
 
@@ -341,11 +330,11 @@ stop_postmaster(bool fast)
 	else
 		return;					/* no cluster running */
 
-	exec_prog(SERVER_STOP_LOG_FILE, NULL, !fast,
+	exec_prog(SERVER_STOP_LOG_FILE, NULL, !in_atexit, !in_atexit,
 			  "\"%s/pg_ctl\" -w -D \"%s\" -o \"%s\" %s stop",
 			  cluster->bindir, cluster->pgconfig,
 			  cluster->pgopts ? cluster->pgopts : "",
-			  fast ? "-m fast" : "");
+			  in_atexit ? "-m fast" : "");
 
 	os_info.running_cluster = NULL;
 }

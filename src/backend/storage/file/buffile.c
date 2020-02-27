@@ -321,6 +321,17 @@ BufFileClose(BufFile *file)
 }
 
 /*
+ * BufFileSetIsTempFile
+ *
+ * Set the file of BufFile is temp file or not
+ */
+void 
+BufFileSetIsTempFile(BufFile *file, bool isTempFile)
+{
+	FileSetIsTempFile(file->file, isTempFile);
+}
+
+/*
  * BufFileLoadBuffer
  *
  * Load some data into buffer, if possible, starting from curOffset.
@@ -978,6 +989,8 @@ BufFileStartCompression(BufFile *file)
 
 	file->zstd_context = zstd_alloc_context();
 	file->zstd_context->cctx = ZSTD_createCStream();
+	if (!file->zstd_context->cctx)
+		elog(ERROR, "out of memory");
 	ZSTD_initCStream(file->zstd_context->cctx, BUFFILE_ZSTD_COMPRESSION_LEVEL);
 
 	CurrentResourceOwner = oldowner;
@@ -1058,6 +1071,8 @@ BufFileEndCompression(BufFile *file)
 
 	/* Done writing. Initialize for reading */
 	file->zstd_context->dctx = ZSTD_createDStream();
+	if (!file->zstd_context->dctx)
+		elog(ERROR, "out of memory");
 	ZSTD_initDStream(file->zstd_context->dctx);
 
 	file->compressed_buffer.src = palloc(BLCKSZ);

@@ -52,7 +52,8 @@
         Database that is running large workloads to hang in the workload. The Greenplum Database
         issue is caused by Linux kernel bugs. <p>RHEL 7.3 and CentOS 7.3 resolves the
         issue.</p></note>
-      <p>Greenplum Database supports TLS V2.</p>
+      <p>Greenplum Database server supports TLS version 1.2 on RHEL/CentOS systems, and TLS version
+        1.3 on Ubuntu systems.</p>
     </body>
     <topic id="topic_i4k_nlx_zgb">
       <title>Software Dependencies</title>
@@ -318,8 +319,10 @@
     <topic id="topic_eyc_l2h_zz">
       <title>Extensions</title>
       <body>
+        <p>This table lists the versions of the Pivotal Greenplum Extensions that are compatible
+          with this release of Greenplum Database 6.</p>
         <table class="- topic/table " id="table_b1q_m2h_zz">
-          <title class="- topic/title ">Pivotal Greenplum 6.0.0 Extensions Compatibility</title>
+          <title class="- topic/title ">Pivotal Greenplum 6 Extensions Compatibility</title>
           <tgroup cols="2" class="- topic/tgroup ">
             <colspec colnum="1" colname="col1" colwidth="297pt" class="- topic/colspec "/>
             <colspec colnum="2" colname="col3" colwidth="117.58pt" class="- topic/colspec "/>
@@ -337,7 +340,7 @@
               </row>
               <row>
                 <entry>PL/Java</entry>
-                <entry>2.0.1</entry>
+                <entry>2.0.2</entry>
               </row>
               <row>
                 <entry>PL/R<sup>2</sup></entry>
@@ -353,7 +356,7 @@
               </row>
               <row>
                 <entry>PL/Container and PL/Container images for Python, R </entry>
-                <entry>2.0.2</entry>
+                <entry>2.1.0</entry>
               </row>
               <row class="- topic/row ">
                 <entry colname="col1" class="- topic/entry ">PostGIS Spatial and Geographic Objects
@@ -368,7 +371,7 @@
             href="https://cwiki.apache.org/confluence/display/MADLIB/FAQ#FAQ-Q1-2WhatdatabaseplatformsdoesMADlibsupportandwhatistheupgradematrix?"
             format="html" scope="external">MADlib FAQ</xref>. <p><sup>2</sup>PL/R supports R 3.5.1.
             On RHEL and CenOS the PL/R package installs R 3.3.3. See <xref
-              href="../ref_guide/extensions/pl_r.xml" format="dita" scope="peer">PL/R
+              href="../analytics/pl_r.xml" format="dita" scope="peer">PL/R
               Language</xref>.</p><p><sup>3</sup>For information about the Python package, including
             the modules provided, see the <xref href="../install_guide/install_python_dsmod.xml"
               format="dita" scope="peer">Python Data Science Module Package</xref>.
@@ -391,11 +394,11 @@
       <body>
         <p>
           <ul id="ul_ckf_sfc_hbb">
-            <li>Greenplum Platform Extension Framework (PXF) v5.8.1 - PXF, integrated with Greenplum
-              Database 6, provides access to Hadoop, object store, and SQL external data stores.
-              Refer to <xref scope="peer" href="../admin_guide/external/pxf-overview.xml">Accessing
-                External Data with PXF</xref> in the <cite>Greenplum Database Administrator
-                Guide</cite> for PXF configuration and usage
+            <li>Greenplum Platform Extension Framework (PXF) v5.10.1 - PXF, integrated with
+              Greenplum Database 6, provides access to Hadoop, object store, and SQL external data
+              stores. Refer to <xref scope="peer" href="../admin_guide/external/pxf-overview.xml"
+                >Accessing External Data with PXF</xref> in the <cite>Greenplum Database
+                Administrator Guide</cite> for PXF configuration and usage
               information.<!--Also check OSS information in Hadoop section--></li>
             <li>Greenplum-Kafka Integration - The Pivotal Greenplum-Kafka Integration provides high
               speed, parallel data transfer from a Kafka cluster to a Pivotal Greenplum Database
@@ -404,7 +407,7 @@
                 href="../greenplum-kafka/intro.html" type="topic" scope="peer" format="html">Pivotal
                 Greenplum-Kafka Integration</xref> Documentation for more information about this
               feature.</li>
-            <li>Greenplum Stream Server v1.2.6 - The Pivotal Greenplum Stream Server is an ETL tool
+            <li>Greenplum Stream Server v1.3.1 - The Pivotal Greenplum Stream Server is an ETL tool
               that provides high speed, parallel data transfer from Informatica, Kafka, and custom
               client data sources to a Pivotal Greenplum Database cluster. Refer to the <xref
                 href="../greenplum-stream/intro.html" type="topic" scope="peer" format="html">
@@ -413,7 +416,7 @@
             <li>Greenplum Informatica Connector v1.0.5 - The Pivotal Greenplum Informatica Connector
               supports high speed data transfer from an Informatica PowerCenter cluster to a Pivotal
               Greenplum Database cluster for batch and streaming ETL operations.</li>
-            <li>Greenplum Spark Connector v1.6.1 - The Pivotal Greenplum Spark Connector supports
+            <li>Greenplum Spark Connector v1.6.2 - The Pivotal Greenplum Spark Connector supports
               high speed, parallel data transfer between Greenplum Database and an Apache Spark
               cluster using Spark’s Scala API.</li>
             <li>Progress DataDirect JDBC Drivers v5.1.4.000223 - The Progress DataDirect JDBC
@@ -462,7 +465,7 @@
     <title id="pm357649">Hadoop Distributions</title>
     <body>
       <p>Greenplum Database provides access to HDFS with the Greenplum Platform Extension Framework
-          (PXF).<ph otherprops="oss-only"> PXF v5.8.1 is integrated with Greenplum Database 6, and
+          (PXF).<ph otherprops="oss-only"> PXF v5.10.0 is integrated with Greenplum Database 6, and
           provides access to Hadoop, object store, and SQL external data stores. Refer to <xref
             scope="peer" href="../admin_guide/external/pxf-overview.xml">Accessing External Data
             with PXF</xref> in the <cite>Greenplum Database Administrator Guide</cite> for PXF
@@ -470,11 +473,43 @@
       <p>PXF can use Cloudera, Hortonworks Data Platform, MapR, and generic Apache Hadoop
         distributions. PXF bundles all of the JAR files on which it depends, including the following
         Hadoop libraries:</p>
-      <ul id="ul_sh2_141_djb">
-        <li>Hadoop version 2.9.2</li>
-        <li>Hive version 1.2.2</li>
-        <li>HBase version 1.3.2</li>
-      </ul>
+      <table>
+        <title>PXF Hadoop Supported Platforms</title>
+        <tgroup cols="4">
+          <colspec colnum="1" colname="col1" colwidth="131pt"/>
+          <colspec colnum="2" colname="col2" colwidth="97pt"/>
+          <colspec colnum="3" colname="col3" colwidth="82pt"/>
+          <colspec colnum="4" colname="col4" colwidth="138pt"/>
+          <thead>
+            <row>
+              <entry colname="col1">PXF Version</entry>
+              <entry colname="col2">Hadoop Version</entry>
+              <entry colname="col3">Hive Server Version</entry>
+              <entry colname="col4">HBase Server Version</entry>
+            </row>
+          </thead>
+          <tbody>
+            <row>
+              <entry colname="col1">5.10.0</entry>
+              <entry colname="col2">2.x, 3.1+</entry>
+              <entry colname="col3">1.x, 2.x, 3.1+</entry>
+              <entry colname="col4">1.3.2</entry>
+            </row>
+            <row>
+              <entry colname="col1">5.8.2</entry>
+              <entry colname="col2">2.x</entry>
+              <entry colname="col3">1.x</entry>
+              <entry colname="col4">1.3.2</entry>
+            </row>
+            <row>
+              <entry colname="col1">5.8.1</entry>
+              <entry colname="col2">2.x</entry>
+              <entry colname="col3">1.x</entry>
+              <entry colname="col4">1.3.2</entry>
+            </row>
+          </tbody>
+        </tgroup>
+      </table>
       <note>If you plan to access JSON format data stored in a Cloudera Hadoop cluster, PXF requires
         a Cloudera version 5.8 or later Hadoop distribution.</note>
     </body>

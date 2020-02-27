@@ -1,4 +1,5 @@
 typedef struct PgUpgradeOptionsData PgUpgradeOptions;
+typedef struct PgUpgradeResponse PgUpgradeResponse;
 
 PgUpgradeOptions *make_pg_upgrade_options(
 	char *old_segment_path,
@@ -8,11 +9,14 @@ PgUpgradeOptions *make_pg_upgrade_options(
 	bool is_dispatcher,
 	char *old_tablespace_mapping_file_path,
 	char *old_bin_dir,
-	char *new_bin_dir);
+	char *new_bin_dir,
+	int old_master_port);
 
-void perform_upgrade(PgUpgradeOptions *options);
+PgUpgradeResponse *perform_upgrade(PgUpgradeOptions *options);
+int pg_upgrade_exit_status(PgUpgradeResponse *status);
+char *pg_upgrade_output(PgUpgradeResponse *status);
 
 /*
  * Returns file handler to standard out of pg_upgrade --check
  */
-FILE *perform_upgrade_check(PgUpgradeOptions *options);
+PgUpgradeResponse *perform_upgrade_check(PgUpgradeOptions *options);

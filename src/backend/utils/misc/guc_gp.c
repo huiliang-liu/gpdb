@@ -25,6 +25,7 @@
 #include "access/xlog_internal.h"
 #include "cdb/cdbappendonlyam.h"
 #include "cdb/cdbdisp.h"
+#include "cdb/cdbdisp_query.h"
 #include "cdb/cdbhash.h"
 #include "cdb/cdbsreh.h"
 #include "cdb/cdbvars.h"
@@ -100,6 +101,12 @@ extern int listenerBacklog;
 List	   *gp_guc_list_for_explain;
 List	   *gp_guc_list_for_no_plan;
 
+/* For synchornized GUC value is cache in HashTable,
+ * dispatch value along with query when some guc changed
+ */
+List       *gp_guc_restore_list = NIL;
+bool        gp_guc_need_restore = false;
+
 char	   *Debug_dtm_action_sql_command_tag;
 
 bool		Debug_print_full_dtm = false;
@@ -125,6 +132,7 @@ bool		Debug_appendonly_print_compaction = false;
 bool		Debug_resource_group = false;
 bool		Debug_bitmap_print_insert = false;
 bool		Test_print_direct_dispatch_info = false;
+bool		Test_copy_qd_qe_split = false;
 bool		gp_permit_relation_node_change = false;
 int			gp_max_local_distributed_cache = 1024;
 bool		gp_appendonly_verify_block_checksums = true;
@@ -160,6 +168,8 @@ bool		debug_walrepl_snd = false;
 bool		debug_walrepl_syncrep = false;
 bool		debug_walrepl_rcv = false;
 bool		debug_basebackup = false;
+
+int rep_lag_avoidance_threshold = 0;
 
 /* Latch mechanism debug GUCs */
 bool		debug_latch = false;
@@ -452,7 +462,6 @@ static const struct config_enum_entry debug_dtm_action_protocol_options[] = {
 	{"abort_some_prepared", DTX_PROTOCOL_COMMAND_ABORT_SOME_PREPARED},
 	{"commit_onephase", DTX_PROTOCOL_COMMAND_COMMIT_ONEPHASE},
 	{"commit_prepared", DTX_PROTOCOL_COMMAND_COMMIT_PREPARED},
-	{"commit_not_prepared", DTX_PROTOCOL_COMMAND_COMMIT_NOT_PREPARED},
 	{"abort_prepared", DTX_PROTOCOL_COMMAND_ABORT_PREPARED},
 	{"retry_commit_prepared", DTX_PROTOCOL_COMMAND_RETRY_COMMIT_PREPARED},
 	{"retry_abort_prepared", DTX_PROTOCOL_COMMAND_RETRY_ABORT_PREPARED},
@@ -480,6 +489,7 @@ static const struct config_enum_entry optimizer_minidump_options[] = {
 static const struct config_enum_entry optimizer_cost_model_options[] = {
 	{"legacy", OPTIMIZER_GPDB_LEGACY},
 	{"calibrated", OPTIMIZER_GPDB_CALIBRATED},
+	{"experimental", OPTIMIZER_GPDB_EXPERIMENTAL},
 	{NULL, 0}
 };
 
@@ -1533,6 +1543,17 @@ struct config_bool ConfigureNamesBool_gp[] =
 			GUC_SUPERUSER_ONLY | GUC_NO_SHOW_ALL | GUC_NOT_IN_SAMPLE
 		},
 		&Test_print_direct_dispatch_info,
+		false,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"test_copy_qd_qe_split", PGC_SUSET, DEVELOPER_OPTIONS,
+			gettext_noop("For testing purposes, print information about which columns are parsed in QD and which in QE."),
+			NULL,
+			GUC_SUPERUSER_ONLY | GUC_NO_SHOW_ALL | GUC_NOT_IN_SAMPLE
+		},
+		&Test_copy_qd_qe_split,
 		false,
 		NULL, NULL, NULL
 	},
@@ -4117,6 +4138,20 @@ struct config_int ConfigureNamesInt_gp[] =
 		1, 0, UINT_MAX / XLogSegSize,
 		NULL, NULL, NULL
 	},
+
+	{
+		{"wait_for_replication_threshold", PGC_SIGHUP, REPLICATION_MASTER,
+			gettext_noop("Maximum amount of WAL written by a transaction prior to waiting for replication."),
+			gettext_noop("This is used just to prevent primary from racing too ahead "
+						 "and avoid huge replication lag. A value of 0 disables "
+						 "the behavior"),
+			GUC_UNIT_KB
+		},
+		&rep_lag_avoidance_threshold,
+		1024, 0, MAX_KILOBYTES,
+		NULL, NULL, NULL
+	},
+
 	{
 		{"gp_initial_bad_row_limit", PGC_USERSET, EXTERNAL_TABLES,
 			gettext_noop("Stops processing when number of the first bad rows exceeding this value"),
@@ -4574,7 +4609,7 @@ struct config_enum ConfigureNamesEnum_gp[] =
 	{
 		{"optimizer_cost_model", PGC_USERSET, DEVELOPER_OPTIONS,
 			gettext_noop("Set optimizer cost model."),
-			gettext_noop("Valid values are legacy, calibrated"),
+			gettext_noop("Valid values are legacy, calibrated, experimental"),
 			GUC_NO_SHOW_ALL | GUC_NOT_IN_SAMPLE
 		},
 		&optimizer_cost_model,
@@ -5131,4 +5166,87 @@ check_gp_workfile_compression(bool *newval, void **extra, GucSource source)
 	}
 #endif
 	return true;
+}
+
+void
+DispatchSyncPGVariable(struct config_generic * gconfig)
+{
+	StringInfoData buffer;
+
+	if (Gp_role != GP_ROLE_DISPATCH || IsBootstrapProcessingMode())
+		return;
+
+	initStringInfo( &buffer );
+
+	appendStringInfo(&buffer, "SET ");
+
+	switch (gconfig->vartype)
+	{
+		case PGC_BOOL:
+		{
+			struct config_bool *bguc = (struct config_bool *) gconfig;
+
+			appendStringInfo(&buffer, "%s TO %s", gconfig->name, *(bguc->variable) ? "true" : "false");
+			break;
+		}
+		case PGC_INT:
+		{
+			struct config_int *iguc = (struct config_int *) gconfig;
+
+			appendStringInfo(&buffer, "%s TO %d", gconfig->name, *iguc->variable);
+			break;
+		}
+		case PGC_REAL:
+		{
+			struct config_real *rguc = (struct config_real *) gconfig;
+
+			appendStringInfo(&buffer, " %s TO %f", gconfig->name, *rguc->variable);
+			break;
+		}
+		case PGC_STRING:
+		{
+			struct config_string *sguc = (struct config_string *) gconfig;
+			const char *str = *sguc->variable;
+			int			i;
+
+			appendStringInfo(&buffer, "%s TO ", gconfig->name);
+
+			/*
+			 * All whitespace characters must be escaped. See
+			 * pg_split_opts() in the backend.
+			 */
+			for (i = 0; str[i] != '\0'; i++)
+				appendStringInfoChar(&buffer, str[i]);
+
+			break;
+		}
+		case PGC_ENUM:
+		{
+			struct config_enum *eguc = (struct config_enum *) gconfig;
+			int			value = *eguc->variable;
+			const char *str = config_enum_lookup_by_value(eguc, value);
+			int			i;
+
+			appendStringInfo(&buffer, "%s TO ", gconfig->name);
+
+			/*
+			 * All whitespace characters must be escaped. See
+			 * pg_split_opts() in the backend. (Not sure if an enum value
+			 * can have whitespace, but let's be prepared.)
+			 */
+			for (i = 0; str[i] != '\0'; i++)
+			{
+				if (isspace((unsigned char) str[i]))
+					appendStringInfoChar(&buffer, '\\');
+
+				appendStringInfoChar(&buffer, str[i]);
+			}
+			break;
+		}
+		default:
+			Insist(false);
+
+	}
+
+	CdbDispatchSetCommand(buffer.data, false);
 }

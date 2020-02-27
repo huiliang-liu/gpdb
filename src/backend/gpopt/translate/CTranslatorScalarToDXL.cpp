@@ -1431,6 +1431,12 @@ CTranslatorScalarToDXL::TranslateAggrefToDXL
 		GPOS_RAISE(gpdxl::ExmaDXL, gpdxl::ExmiQuery2DXLUnsupportedFeature, GPOS_WSZ_LIT("Aggregate functions with FILTER"));
 	}
 
+	// ORCA doesn't support DISTINCT with multiple arguments yet.
+	if (gpdb::ListLength(aggref->aggdistinct) > 1)
+	{
+		GPOS_RAISE(gpdxl::ExmaDXL, gpdxl::ExmiQuery2DXLUnsupportedFeature, GPOS_WSZ_LIT("Aggregate functions with multiple DISTINCT arguments"));
+	}
+
 	IMDId *mdid_return_type = CScalarAggFunc::PmdidLookupReturnType(agg_mdid, (EdxlaggstageNormal == agg_stage), m_md_accessor);
 	IMDId *resolved_ret_type = NULL;
 	if (m_md_accessor->RetrieveType(mdid_return_type)->IsAmbiguous())
@@ -2169,12 +2175,12 @@ CTranslatorScalarToDXL::TranslateGenericDatumToDXL
 	}
 
 	LINT lint_value = 0;
-	if (CMDTypeGenericGPDB::HasByte2IntMapping(mdid))
+	if (CMDTypeGenericGPDB::HasByte2IntMapping(md_type))
 	{
-		lint_value = ExtractLintValueFromDatum(mdid, is_null, bytes, length);
+		lint_value = ExtractLintValueFromDatum(md_type, is_null, bytes, length);
 	}
 
-	return CMDTypeGenericGPDB::CreateDXLDatumVal(mp, mdid, type_modifier, is_null, bytes, length, lint_value, double_value);
+	return CMDTypeGenericGPDB::CreateDXLDatumVal(mp, mdid, md_type, type_modifier, is_null, bytes, length, lint_value, double_value);
 }
 
 
@@ -2429,13 +2435,14 @@ CTranslatorScalarToDXL::ExtractByteArrayFromDatum
 LINT
 CTranslatorScalarToDXL::ExtractLintValueFromDatum
 	(
-	IMDId *mdid,
+	const IMDType *md_type,
 	BOOL is_null,
 	BYTE *bytes,
 	ULONG length
 	)
 {
-	GPOS_ASSERT(CMDTypeGenericGPDB::HasByte2IntMapping(mdid));
+	IMDId *mdid = md_type->MDId();
+	GPOS_ASSERT(CMDTypeGenericGPDB::HasByte2IntMapping(md_type));
 
 	LINT lint_value = 0;
 	if (is_null)
@@ -2469,6 +2476,14 @@ CTranslatorScalarToDXL::ExtractLintValueFromDatum
 			else if (mdid->Equals(&CMDIdGPDB::m_mdid_bpchar))
 			{
 				hash = gpdb::HashBpChar((Datum) bytes);
+			}
+			else if (mdid->Equals(&CMDIdGPDB::m_mdid_char))
+			{
+				hash = gpdb::HashChar((Datum) bytes);
+			}
+			else if (mdid->Equals(&CMDIdGPDB::m_mdid_name))
+			{
+				hash = gpdb::HashName((Datum) bytes);
 			}
 			else
 			{
