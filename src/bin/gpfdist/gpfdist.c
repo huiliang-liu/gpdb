@@ -1171,7 +1171,7 @@ static int local_send(request_t *r, const char* buf, int buflen)
 		int e = errno;
 		int ok = (e == EINTR || e == EAGAIN);
 #endif
-		if ( e == EPIPE || e == ECONNRESET )
+		if ( e == EPIPE || e == ENOBUFS )
 		{
 			gwarning(r, "gpfdist_send failed - the connection was terminated by the client (%d: %s)", e, strerror(e));
 			/* close stream and release fd & flock on pipe file*/
@@ -1634,10 +1634,12 @@ static int session_attach(request_t* r)
 		apr_hash_set(gcb.session.tab, session->key, APR_HASH_KEY_STRING, session);
 
 		gprintlnif(r, "new session (%ld): (%s, %s)", session->id, session->path, session->tid);
+	} else {
+		gdebug(r, "sleep start, r->sock=%d", r->sock);
+		sleep((r->sock % 3 + 1));
+		gdebug(r, "sleep done, r->sock=%d", r->sock);
 	}
-
 	/* found a session in hashtable*/
-
 	/* session already ended. send an empty response, and close. */
 	if (NULL == session->fstream)
 	{
@@ -1781,7 +1783,7 @@ static void do_write(int fd, short event, void* arg)
 					 * TODO: It is not safe to check errno here, should check and
 					 * return special value in local_send()
 					 */
-					if (errno == EPIPE || errno == ECONNRESET)
+					if (errno == EPIPE || errno == ENOBUFS)
 						r->outblock.bot = r->outblock.top;
 					request_end(r, 1, "gpfdist send block header failure");
 					return;
@@ -1813,7 +1815,7 @@ static void do_write(int fd, short event, void* arg)
 			 * that, hopefully we would find out about that in some other way
 			 * anyway, so it is okay if we don't poison the session.
 			 */
-			if (errno == EPIPE || errno == ECONNRESET)
+			if (errno == EPIPE || errno == ENOBUFS)
 				r->outblock.bot = r->outblock.top;
 			request_end(r, 1, "gpfdist send data failure");
 			return;
