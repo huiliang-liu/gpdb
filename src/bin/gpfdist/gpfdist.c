@@ -46,7 +46,7 @@
 #define SHUT_WR SD_SEND
 #define socklen_t int
 //#undef ECONNRESET
-#define ECONNRESET   WSAECONNRESET
+//#define ECONNRESET   WSAECONNRESET
 
 #endif
 
@@ -3602,6 +3602,7 @@ int gpfdist_init(int argc, const char* const argv[])
 
 int gpfdist_run()
 {
+	gprintln(NULL, "Dump errno: ECONNRESET=%d, EPIPE=%d", ECONNRESET, EPIPE);
 	return event_dispatch();
 }
 
