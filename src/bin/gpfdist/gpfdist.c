@@ -45,7 +45,7 @@
 #include <io.h>
 #define SHUT_WR SD_SEND
 #define socklen_t int
-#undef ECONNRESET
+//#undef ECONNRESET
 #define ECONNRESET   WSAECONNRESET
 
 #endif
