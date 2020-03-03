@@ -25,7 +25,7 @@ function setup_ssh_keys() {
 # We set up the runtime vars here.
 function remote_setup() {
     # Get a session id for different commit builds.
-    SESSION_ID=$(date +%Y%m%d%H%M%S.%N)
+    SESSION_ID=temp_build_lhl
 
     WORK_DIR="C:\\Users\\buildbot\\${SESSION_ID}"
     
@@ -92,7 +92,7 @@ function _main() {
 
     time setup_ssh_keys
     time remote_setup
-    trap cleanup EXIT
+    # trap cleanup EXIT
     time remote_clone
     time remote_compile
     time download

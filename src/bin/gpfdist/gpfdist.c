@@ -48,9 +48,9 @@
 #include <io.h>
 #define SHUT_WR SD_SEND
 #define socklen_t int
-#ifndef ECONNRESET
+//#ifndef ECONNRESET
 #define ECONNRESET   WSAECONNRESET
-#endif
+//#endif
 
 #endif
 
@@ -2432,6 +2432,7 @@ http_setup(void)
 		for (rp = addrs; rp != NULL; rp = rp->ai_next)
 		{
 			gprint(NULL, "Trying to open listening socket:\n");
+			gprintln(NULL, "00Dump socket errno before running: ECONNRESET=%d, EPIPE=%d", ECONNRESET, EPIPE);
 			print_listening_address(rp);
 
 			/*
@@ -3636,6 +3637,7 @@ int gpfdist_init(int argc, const char* const argv[])
 
 int gpfdist_run()
 {
+	gprintln(NULL, "Dump socket errno before running: ECONNRESET=%d, EPIPE=%d", ECONNRESET, EPIPE);
 	return event_dispatch();
 }
 
