@@ -39,6 +39,7 @@ function generate_gpfdist_certs() {
 	cat clientca.crt >> root.crt
 	cat client2root.crt >> root.crt
 	cat client2ca.crt >> root.crt
+	cat serverca.crt >> server.crt
 	rm -f *.csr *.srl
 	popd
 }
@@ -46,12 +47,11 @@ function generate_gpfdist_certs() {
 function update_gpdb_certs() {
     for dir in $(find $MASTER_DATA_DIRECTORY/../../.. -name pg_hba.conf)
         do
-    	if [ -d $(dirname $dir)/gpfdists ]; then
-    	    rm -rf $(dirname $dir)/gpfdists/*
+        if [ -d $(dirname $dir)/gpfdists ]; then
+            rm -rf $(dirname $dir)/gpfdists/*
             cp -rf ${CERTS_PATH}/* $(dirname $dir)/gpfdists
-	    cp $(dirname $dir)/gpfdists/serverroot.crt $(dirname $dir)/gpfdists/root.crt
-	    cat $(dirname $dir)/gpfdists/serverca.crt >> $(dirname $dir)/gpfdists/root.crt
-    	fi
+            cp $(dirname $dir)/gpfdists/serverroot.crt $(dirname $dir)/gpfdists/root.crt
+        fi
     done
 }
 
