@@ -21,6 +21,7 @@
 #include <arpa/inet.h>
 
 #include <curl/curl.h>
+#include <time.h>
 
 #include "cdb/cdbsreh.h"
 #include "cdb/cdbutil.h"
@@ -554,8 +555,9 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 	/* retry in case server return timeout error */
 	unsigned int wait_time = 1;
 	unsigned int retry_count = 0;
-	/* retry at most twice(300 seconds * 2) when CURLE_OPERATION_TIMEDOUT happens */
-	unsigned int timeout_count = 0;
+	/* retry at most 600s by default when any error happens */
+	time_t start_time = time(NULL);
+	time_t end_time = start_time + writable_external_table_timeout;
 
 	while (true)
 	{
@@ -564,30 +566,13 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		 * when work load is high:
 		 *	- 'could not connect to server'
 		 *	- gpfdist return timeout (HTTP 408)
-		 * By default it will wait at most 127 seconds before abort.
+		 * By default it will wait at least min(127, writable_external_table_timeout) seconds before abort.
 		 * 1 + 2 + 4 + 8 + 16 + 32 + 64 = 127
 		 */
 		CURLcode e = curl_easy_perform(file->curl->handle);
 		if (CURLE_OK != e)
 		{
-			/* For curl timeout, retry 2 times before reporting error */
-			if (CURLE_OPERATION_TIMEDOUT == e)
-			{
-				timeout_count++;
-				elog(LOG, "curl operation timeout, timeout_count = %d", timeout_count);
-				if (timeout_count >= 2)
-				{
-					ereport(ERROR,
-					(errcode(ERRCODE_CONNECTION_FAILURE),
-					errmsg("error when writing data to gpfdist %s, quit after %d timeout_count",
-							file->curl_url, timeout_count)));
-				}
-				continue;
-			}
-			else
-			{
-				elog(LOG, "%s error (%d - %s)", file->curl_url, e, curl_easy_strerror(e));
-			}
+			elog(LOG, "%s response (%d - %s)", file->curl_url, e, curl_easy_strerror(e));
 		}
 		else
 		{
@@ -615,10 +600,9 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		}
 
 		/*
-		 * For FDIST_TIMEOUT and curl errors except CURLE_OPERATION_TIMEDOUT
-		 * Retry until MAX_TRY_WAIT_TIME
+		 * Retry until MAX_TRY_WAIT_TIME or end_time is reached
 		 */
-		if (wait_time > MAX_TRY_WAIT_TIME)
+		if (wait_time > MAX_TRY_WAIT_TIME || (time(NULL) >= end_time && writable_external_table_timeout > 0))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_FAILURE),
@@ -1141,7 +1125,13 @@ url_curl_fopen(char *url, bool forwrite, extvar_t *ev, CopyState pstate)
 	{
 		// TIMEOUT for POST only, GET is single HTTP request,
 		// probablity take long time.
-		CURL_EASY_SETOPT(file->curl->handle, CURLOPT_TIMEOUT, 300L);
+		long timeout = 300L;
+		elog(LOG, "writable_external_table_timeout = %d", writable_external_table_timeout);
+		if (writable_external_table_timeout > 0 && writable_external_table_timeout < timeout)
+		{
+			timeout = writable_external_table_timeout;
+		}
+		CURL_EASY_SETOPT(file->curl->handle, CURLOPT_TIMEOUT, timeout);
 
 		/*init sequence number*/
 		file->seq_number = 1;
