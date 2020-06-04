@@ -606,7 +606,7 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		now = time(NULL);
 		if ((wait_time > MAX_TRY_WAIT_TIME || now >= end_time) && writable_external_table_timeout > 0)
 		{
-			elog(LOG, "abort writing data to gpfdist, wait_time = %d, duration = %d, writable_external_table_timeout = %d",
+			elog(LOG, "abort writing data to gpfdist, wait_time = %d, duration = %ld, writable_external_table_timeout = %d",
 				wait_time, now-start_time, writable_external_table_timeout);
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_FAILURE),
@@ -615,8 +615,9 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		}
 		else
 		{
-			elog(LOG, "failed to send request to gpfdist (%s), will retry after %d seconds", file->curl_url, wait_time);
 			unsigned int for_wait = 0;
+			wait_time = wait_time > MAX_TRY_WAIT_TIME ? MAX_TRY_WAIT_TIME : wait_time;
+			elog(LOG, "failed to send request to gpfdist (%s), will retry after %d seconds", file->curl_url, wait_time);
 			while (for_wait++ < wait_time)
 			{
 				pg_usleep(1000000);
