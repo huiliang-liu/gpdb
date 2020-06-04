@@ -557,6 +557,7 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 	unsigned int retry_count = 0;
 	/* retry at most 600s by default when any error happens */
 	time_t start_time = time(NULL);
+	time_t now;
 	time_t end_time = start_time + writable_external_table_timeout;
 
 	while (true)
@@ -602,8 +603,11 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		/*
 		 * Retry until MAX_TRY_WAIT_TIME or end_time is reached
 		 */
-		if ((wait_time > MAX_TRY_WAIT_TIME || time(NULL) >= end_time) && writable_external_table_timeout > 0)
+		now = time(NULL);
+		if ((wait_time > MAX_TRY_WAIT_TIME || now >= end_time) && writable_external_table_timeout > 0)
 		{
+			elog(LOG, "abort writing data to gpfdist, wait_time = %d, duration = %d, writable_external_table_timeout = %d",
+				wait_time, now-start_time, writable_external_table_timeout);
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_FAILURE),
 					 errmsg("error when writing data to gpfdist %s, quit after %d tries",
