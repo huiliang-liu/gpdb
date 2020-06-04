@@ -602,7 +602,7 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		/*
 		 * Retry until MAX_TRY_WAIT_TIME or end_time is reached
 		 */
-		if (wait_time > MAX_TRY_WAIT_TIME || (time(NULL) >= end_time && writable_external_table_timeout > 0))
+		if ((wait_time > MAX_TRY_WAIT_TIME || time(NULL) >= end_time) && writable_external_table_timeout > 0)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_FAILURE),
