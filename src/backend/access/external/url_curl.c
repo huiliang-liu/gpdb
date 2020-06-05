@@ -558,7 +558,7 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 	/* retry at most 600s by default when any error happens */
 	time_t start_time = time(NULL);
 	time_t now;
-	time_t end_time = start_time + writable_external_table_timeout;
+	time_t end_time = start_time + write_to_gpfdist_timeout;
 
 	while (true)
 	{
@@ -567,7 +567,7 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		 * when work load is high:
 		 *	- 'could not connect to server'
 		 *	- gpfdist return timeout (HTTP 408)
-		 * By default it will wait at least min(127, writable_external_table_timeout) seconds before abort.
+		 * By default it will wait at least min(127, write_to_gpfdist_timeout) seconds before abort.
 		 * 1 + 2 + 4 + 8 + 16 + 32 + 64 = 127
 		 */
 		CURLcode e = curl_easy_perform(file->curl->handle);
@@ -601,17 +601,17 @@ gp_curl_easy_perform_backoff_and_check_response(URL_CURL_FILE *file)
 		}
 
 		/*
-		 * Retry until MAX_TRY_WAIT_TIME or end_time is reached
+		 * Retry until end_time is reached
 		 */
 		now = time(NULL);
-		if ((wait_time > MAX_TRY_WAIT_TIME || now >= end_time) && writable_external_table_timeout > 0)
+		if (now >= end_time && write_to_gpfdist_timeout > 0)
 		{
-			elog(LOG, "abort writing data to gpfdist, wait_time = %d, duration = %ld, writable_external_table_timeout = %d",
-				wait_time, now-start_time, writable_external_table_timeout);
+			elog(LOG, "abort writing data to gpfdist, wait_time = %d, duration = %ld, write_to_gpfdist_timeout = %d",
+				wait_time, now - start_time, write_to_gpfdist_timeout);
 			ereport(ERROR,
 					(errcode(ERRCODE_CONNECTION_FAILURE),
 					 errmsg("error when writing data to gpfdist %s, quit after %d tries",
-							file->curl_url, retry_count+1)));
+							file->curl_url, retry_count + 1)));
 		}
 		else
 		{
@@ -1131,10 +1131,10 @@ url_curl_fopen(char *url, bool forwrite, extvar_t *ev, CopyState pstate)
 		// TIMEOUT for POST only, GET is single HTTP request,
 		// probablity take long time.
 		long timeout = 300L;
-		elog(LOG, "writable_external_table_timeout = %d", writable_external_table_timeout);
-		if (writable_external_table_timeout > 0 && writable_external_table_timeout < timeout)
+		elog(LOG, "write_to_gpfdist_timeout = %d", write_to_gpfdist_timeout);
+		if (write_to_gpfdist_timeout > 0 && write_to_gpfdist_timeout < timeout)
 		{
-			timeout = writable_external_table_timeout;
+			timeout = write_to_gpfdist_timeout;
 		}
 		CURL_EASY_SETOPT(file->curl->handle, CURLOPT_TIMEOUT, timeout);
 

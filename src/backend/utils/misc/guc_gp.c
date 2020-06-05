@@ -2898,12 +2898,12 @@ struct config_int ConfigureNamesInt_gp[] =
 	},
 
 	{
-		{"writable_external_table_timeout", PGC_USERSET, EXTERNAL_TABLES,
+		{"write_to_gpfdist_timeout", PGC_USERSET, EXTERNAL_TABLES,
 			gettext_noop("Timeout (in seconds) for writing data to gpfdist server."),
-			gettext_noop("Default value is 600. A value of 0 turns off the timeout."),
+			gettext_noop("Default value is 600. A value of 0 indicates 'retry forever'."),
 			GUC_UNIT_S | GUC_NOT_IN_SAMPLE
 		},
-		&writable_external_table_timeout,
+		&write_to_gpfdist_timeout,
 		600, 0, INT_MAX,
 		NULL, NULL, NULL
 	},
