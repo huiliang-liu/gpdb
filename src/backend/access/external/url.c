@@ -19,7 +19,7 @@
 
 /* GUC */
 int readable_external_table_timeout = 0;
-int write_to_gpfdist_timeout = 600;
+int write_to_gpfdist_timeout = 300;
 
 /*
  * url_fopen
