@@ -70,6 +70,11 @@ setup_gpadmin_user() {
       # create a default group gpadmin, and add user gpadmin to group gapdmin, supergroup, tty
       /usr/sbin/useradd -U -G supergroup,tty gpadmin
       ;;
+    sles)
+      # create a default group gpadmin, and add user gpadmin to group gapdmin, supergroup, tty
+      user_add_cmd="/usr/sbin/useradd -U -G supergroup,tty gpadmin"
+      create_gpadmin_if_not_existing ${user_add_cmd}
+      ;;
     *) echo "Unknown OS: $TEST_OS"; exit 1 ;;
   esac
   echo -e "password\npassword" | passwd gpadmin
