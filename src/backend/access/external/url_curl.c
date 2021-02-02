@@ -551,7 +551,7 @@ get_gpfdist_status(URL_CURL_FILE *file)
 typedef bool (*perform_func)(URL_CURL_FILE *file);
 
 static void
-gp_perform_backoff_and_check_response(URL_CURL_FILE *file, perform_func func)
+gp_perform_backoff_and_check_response(URL_CURL_FILE *file, perform_func perform)
 {
 	/* retry in case server return timeout error */
 	unsigned int wait_time = 1;
@@ -563,7 +563,7 @@ gp_perform_backoff_and_check_response(URL_CURL_FILE *file, perform_func func)
 
 	while (true)
 	{
-		if (!func(file))
+		if (!perform(file))
 		{
 			return;
 		}
