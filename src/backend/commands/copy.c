@@ -6600,7 +6600,7 @@ CopyReadAttributesText(CopyState cstate, int stop_processing_at_field)
 				found_delim = true;
 				break;
 			}
-			if (c == escapec)
+			if (c == escapec && !cstate->escape_off)
 			{
 				if (cur_ptr >= line_end_ptr)
 					break;
