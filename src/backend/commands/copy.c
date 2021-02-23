@@ -6633,7 +6633,7 @@ static int
 CopyReadAttributesText(CopyState cstate, int stop_processing_at_field)
 {
 	char		delimc = cstate->delim[0];
-	char		escapec = cstate->escape_off ? delimc : cstate->escape[0];
+	char		escapec = cstate->escape[0];
 	bool		delim_off = cstate->delim_off;
 	int			fieldno;
 	char	   *output_ptr;
